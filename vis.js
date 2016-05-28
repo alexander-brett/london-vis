@@ -1,21 +1,52 @@
 d3.select('body').append('span').text('hi!');
 
-var width = 500;
+var width = 800;
 var height = 500;
+
+function group(data){
+  var indices = {};
+  var result = [];
+  for (var i in data){
+    var d = data[i];
+    var stub = d.pcd2.split(' ')[0];
+    var i = indices[stub];
+    if (i === undefined){
+      indices[stub] = result.length;
+      result.push({count:1, lat:+d.lat, long:+d.long, stub:stub});
+    } else {
+      result[i].lat += (d.lat-result[i].lat)/result[i].count;
+      result[i].long += (d.long-result[i].long)/result[i].count;
+      result[i].count++;
+    }
+  }
+
+  return result;
+}
+
+function position(alpha){
+  return function(datum){
+    var projection = d3.geo.equirectangular().scale(35000).center([0, 51.5085300]).translate([width/2, height/2]);
+    var desired = projection([datum.long, datum.lat]);
+    var x = desired[0] - datum.x;
+    var y = desired[1] - datum.y;
+    var force = 0.01*Math.sqrt(x*x + y*y);
+    datum.x += alpha*x*force;
+    datum.y += alpha*y*force;
+  }
+}
 
 d3.csv('London_postcode-ONS-postcode-Directory-May15.csv', function(data){
 
-  var nodes = [{}].concat(data.slice(0,20).map(function(d){
-    return { radius:20}
-  })),   root = nodes[0],
+  var nodes = group(data).map(function(d){
+    d.radius = Math.pow(d.count, 0.25);
+    return d;
+  }),
     color = d3.scale.category10();
 
-  root.radius = 0;
-  root.fixed = true;
 
   var force = d3.layout.force()
-      .gravity(0.1)
-      .charge(function(d, i) { return i ? -10 : -2000; })
+      .gravity(0.0)
+      .charge(function(d, i) { -1*d.radius; })
       .nodes(nodes)
       .size([width, height]);
 
@@ -33,24 +64,14 @@ d3.csv('London_postcode-ONS-postcode-Directory-May15.csv', function(data){
       .style("fill", function(d, i) { return color(i % 3); });
 
   force.on("tick", function(e) {
-    var q = d3.geom.quadtree(nodes),
-        i = 0,
-        n = nodes.length;
+        node.each(position(e.alpha));
+        node.each(collide(e.alpha));
 
-        node.each(collide(e.alpha))
 
     svg.selectAll("circle")
         .attr("cx", function(d) { return d.x; })
         .attr("cy", function(d) { return d.y; });
   });
-
-  svg.on("mousemove", function() {
-    var p1 = d3.mouse(this);
-    root.px = p1[0];
-    root.py = p1[1];
-    force.resume();
-  });
-
 
   function collide(alpha) {
     return function(node1) {
@@ -60,12 +81,12 @@ d3.csv('London_postcode-ONS-postcode-Directory-May15.csv', function(data){
           var y = node1.y - node2.y;
           var distance = Math.sqrt(x * x + y * y);
 
-          var minDistance = node1.radius + node2.radius + 3;
+          var minDistance = node1.radius + node2.radius + 2;
 
 
-            var force =distance < minDistance ? 
-            0.5*(minDistance - distance) : 
-             Math.min(1, 1 / Math.pow(minDistance - distance, 3));
+            var force =distance < minDistance ?
+            0.5*(minDistance - distance) :
+            0// Math.min(1, 1 / Math.pow(minDistance - distance, 3));
                if(force > 0.1) {
             node1.x = node1.x + force*x/Math.abs(x);
             node1.y = node1.y + force*y/Math.abs(y);
