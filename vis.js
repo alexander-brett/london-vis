@@ -1,5 +1,7 @@
-var width = 1200;
-var height = 800;
+var scale = 5;
+
+var width = 240 * scale;
+var height = 160 * scale;
 
 function group(data){
   var result = {};
@@ -41,10 +43,7 @@ var boroughs = [];
 function prepareData(data, locationData){
   var wardlocations = group(locationData);
 
-  var min = 100;
-  var max = 0;
-
-  var projection = d3.geo.mercator().scale(70000).center([0, 51.5085300]).translate([width/2, height/2]);
+  var projection = d3.geo.mercator().scale(scale*14000).center([0, 51.5085300]).translate([width/2, height/2]);
 
   for (var i in data){
     var code = data[i].Old_Code;
@@ -66,7 +65,7 @@ function radiusFromPopulation () {
   .domain([
     0,
     dataBounds.Population.max])
-  .range([0,20]);
+  .range([0,4*scale]);
 
   var obj = function(d){
     d.radius = radiusScale(fix(d.Population));
@@ -80,7 +79,7 @@ function radiusFromPopulation () {
 function radiusFromArea(){
   var radiusScale = d3.scale.linear()
     .domain([0,Math.sqrt(dataBounds.Area.max)])
-    .range([3,30]);
+    .range([3,6*scale]);
   var obj = function(d){
     d.radius = radiusScale(Math.sqrt(fix(d.Area)));
     return d.radius;
@@ -94,7 +93,7 @@ function radiusFromArea(){
 function radiusFromJobs () {
   var radiusScale = d3.scale.linear()
     .domain([0, Math.sqrt(dataBounds.Jobs.max)])
-    .range([3,30]);
+    .range([3,6*scale]);
   var obj = function(d){
     d.radius = radiusScale(Math.sqrt(fix(d.Jobs)));
     return d.radius;
@@ -145,7 +144,7 @@ function colourFromBAMEPercent(){
     var n = Math.round(percentToByteScale(d.BAME_percent));
     return d3.rgb(255-n,n,255-n);
   }
-  makeColourFromBAMEPercent.cpation = function(d){
+  makeColourFromBAMEPercent.caption = function(d){
     return "BAME population: " + d.BAME_percent + '%';
   }
   return makeColourFromBAMEPercent;
@@ -203,7 +202,7 @@ d3.csv('ward_data.txt', function(wardData){
             var x = node1.x - node2.x;
             var y = node1.y - node2.y;
             var distance = Math.sqrt(x * x + y * y);
-            var minDistance = node1.radius + node2.radius + 4;
+            var minDistance = node1.radius + node2.radius + scale;
             var force =distance < minDistance ?  0.2*(minDistance - distance) : 0;
             if(force > 0.1) {
               node1.x = node1.x + force*x/Math.abs(x);
@@ -222,7 +221,7 @@ d3.csv('ward_data.txt', function(wardData){
       var node = svg.selectAll("circle")
         .data(data)
         .transition()
-        .duration(1000)
+        .duration(700)
         .attr("r", radiusGenerator)
         .selectAll("title")
         .text(function(d){return d.Name + '\n' + radiusGenerator.caption(d) + '\n' + colourGenerator.caption(d)});
@@ -235,7 +234,7 @@ d3.csv('ward_data.txt', function(wardData){
       var node = svg.selectAll("circle")
       .data(data)
       .transition()
-      .duration(1000)
+      .duration(700)
       .style("fill",  colourGenerator)
       .selectAll("title").text(function(d){return d.Name + '\n' + radiusGenerator.caption(d) + '\n' + colourGenerator.caption(d)});
     });
