@@ -1,5 +1,5 @@
 var width = 1200;
-var height = 1000;
+var height = 800;
 
 function group(data){
   var result = {};
@@ -17,24 +17,26 @@ function group(data){
   return result;
 }
 
-
 function position(alpha){
   return function(datum){
     var desired = datum.desiredLocation;
     var x = desired[0] - datum.x;
     var y = desired[1] - datum.y;
-    var force = 0.005*Math.sqrt(x*x + y*y);
+    var force = 0.01*Math.sqrt(x*x + y*y);
     datum.x += alpha*x*force;
     datum.y += alpha*y*force;
   }
 }
 
 function fix(d){
-  return typeof(d) === 'string' ? +(d.replace(',','').replace('£','')) : d;
+  return typeof(d) === 'string'
+    ? d == 'n/a'
+      ? 0
+      : +(d.replace(',','').replace('£',''))
+    : d;
 }
 
-
-  var boroughs = [];
+var boroughs = [];
 
 function prepareData(data, locationData){
   var wardlocations = group(locationData);
@@ -43,8 +45,6 @@ function prepareData(data, locationData){
   var max = 0;
 
   var projection = d3.geo.mercator().scale(70000).center([0, 51.5085300]).translate([width/2, height/2]);
-
-
 
   for (var i in data){
     var code = data[i].Old_Code;
@@ -61,111 +61,165 @@ function prepareData(data, locationData){
   return data;
 }
 
-function makeRadiusFromPopulation (d) {
+function radiusFromPopulation () {
   var radiusScale = d3.scale.linear()
   .domain([
     0,
     dataBounds.Population.max])
-    .range([0,20]);
+  .range([0,20]);
 
+  var obj = function(d){
     d.radius = radiusScale(fix(d.Population));
+    return d.radius;}
+  obj.caption = function(d){
+    return "Population: " + d.Population;
+  }
+  return obj;
+}
+
+function radiusFromArea(){
+  var radiusScale = d3.scale.linear()
+    .domain([0,Math.sqrt(dataBounds.Area.max)])
+    .range([3,30]);
+  var obj = function(d){
+    d.radius = radiusScale(Math.sqrt(fix(d.Area)));
+    return d.radius;
+  };
+  obj.caption = function(d){
+    return "Area: "+d.Area+"sq. km";
+  };
+  return obj;
+}
+
+function radiusFromJobs () {
+  var radiusScale = d3.scale.linear()
+    .domain([0, Math.sqrt(dataBounds.Jobs.max)])
+    .range([3,30]);
+  var obj = function(d){
+    d.radius = radiusScale(Math.sqrt(fix(d.Jobs)));
     return d.radius;
   }
-
-  function makeRadiusFromArea (d) {
-    var radiusScale = d3.scale.linear()
-    .domain([
-      0,
-      Math.sqrt(dataBounds.Area.max)])
-      .range([3,20]);
-
-      d.radius = radiusScale(Math.sqrt(fix(d.Area)));
-      return d.radius;
+  obj.caption = function(d){
+    return "Jobs: " + d.Jobs;
   }
+  return obj;
+}
 
+function makeRadius(){
+  return {
+    "Area": radiusFromArea(),
+    "Population": radiusFromPopulation(),
+    "Jobs": radiusFromJobs()
+  }[d3.select('input[name=sizeOption]:checked').node().value]
+}
 
-    var palette = d3.scale.category20();
+var palette = d3.scale.category20b();
 
-  function makeColourFromBorough (d){
-    var percentToByteScale = d3.scale.linear().range([0,255])
-      .domain([dataBounds.Social_house_percent.min,dataBounds.Social_house_percent.max]);
-    var n = Math.round(percentToByteScale(d.Social_house_percent));
-    return palette(boroughs.indexOf(d.borough)%20)//d3.rgb(0,n,n);
-  }
+function makeColourFromBorough (d){
+  return palette(boroughs.indexOf(d.borough)%20)
+}
 
-  function makeRadius(){
-    if (d3.select('input[name=sizeOption]:checked').node().value == "Area"){
-      return makeRadiusFromArea
-    }
-    return makeRadiusFromPopulation;
-  }
+function makeColourFromSocialHousingPercent(d){
+  var percentToByteScale = d3.scale.linear().range([0,255])
+  .domain([dataBounds.Social_house_percent.min,dataBounds.Social_house_percent.max]);
+  var n = Math.round(percentToByteScale(d.Social_house_percent));
+  return d3.rgb(0,n,n);
+}
 
+function makeColourFromBAMEPercent(d){
+  var percentToByteScale = d3.scale.linear().range([0,255])
+  .domain([dataBounds.BAME_percent.min,dataBounds.BAME_percent.max]);
+  var n = Math.round(percentToByteScale(d.BAME_percent));
+  return d3.rgb(255-n,n,255-n);
+}
 
-  d3.csv('ward_data.txt', function(wardData){
+function makeColour(){
+  return {
+    "Borough": makeColourFromBorough,
+    "SocialHousingPercent": makeColourFromSocialHousingPercent,
+    "BAME_percent": makeColourFromBAMEPercent,
+  }[d3.select('input[name=colourOption]:checked').node().value]
+}
 
-    d3.csv('London_postcode-ONS-postcode-Directory-May15.csv', function(locationData){
-      var data = prepareData(wardData, locationData);
+d3.csv('ward_data.txt', function(wardData){
 
-      var force = d3.layout.force()
-        .gravity(0.0)
-        .friction(0.1)
-        .charge(function(d){return -0*makeRadius()(d)})
-        .nodes(data)
-        .size([width, height]);
+  d3.csv('London_postcode-ONS-postcode-Directory-May15.csv', function(locationData){
+    var data = prepareData(wardData, locationData);
 
-      force.start();
+    var force = d3.layout.force()
+    .gravity(0.0)
+    .friction(0.1)
+    .charge(function(d){return -0*makeRadius()(d)})
+    .nodes(data)
+    .size([width, height]);
 
-      var svg = d3.select("body").append("svg")
-        .attr("width", width)
-        .attr("height", height);
+    force.start();
 
-      var node = svg.selectAll("circle")
-        .data(data);
+    var svg = d3.select("body").append("svg")
+    .attr("width", width)
+    .attr("height", height);
 
-      node.enter().append("circle")
-        .attr("r", makeRadius())
-        .style("fill",  makeColourFromBorough)
-        .append("title").text(function(d){return d.Name});
+    var node = svg.selectAll("circle")
+    .data(data);
 
-      force.on("tick", function(e) {
-        node.each(position(e.alpha));
-        node.each(collide(e.alpha));
+    var radiusGenerator =  makeRadius();
+    node.enter().append("circle")
+    .attr("r",radiusGenerator)
+    .style("fill",  makeColourFromBorough)
+    .append("title").text(function(d){return d.Name + '\n' + radiusGenerator.caption(d)});
 
-        node
-          .attr("cx", function(d) { return d.x; })
-          .attr("cy", function(d) { return d.y; });
-      });
+    force.on("tick", function(e) {
+      node.each(position(e.alpha));
+      node.each(collide(e.alpha));
 
-      function collide(alpha) {
-        return function(node1) {
-          node.each(function(node2) {
-            if(node1 != node2) {
-              var x = node1.x - node2.x;
-              var y = node1.y - node2.y;
-              var distance = Math.sqrt(x * x + y * y);
-              var minDistance = node1.radius + node2.radius + 4;
-              var force =distance < minDistance ?  0.2*(minDistance - distance) : 0;
-              if(force > 0.1) {
-                node1.x = node1.x + force*x/Math.abs(x);
-                node1.y = node1.y + force*y/Math.abs(y);
-                node2.x = node2.x - force*x/Math.abs(x);
-                node2.y = node2.y - force*y/Math.abs(y);
-              }
+      node
+      .attr("cx", function(d) { return d.x; })
+      .attr("cy", function(d) { return d.y; });
+    });
+
+    function collide(alpha) {
+      return function(node1) {
+        node.each(function(node2) {
+          if(node1 != node2) {
+            var x = node1.x - node2.x;
+            var y = node1.y - node2.y;
+            var distance = Math.sqrt(x * x + y * y);
+            var minDistance = node1.radius + node2.radius + 4;
+            var force =distance < minDistance ?  0.2*(minDistance - distance) : 0;
+            if(force > 0.1) {
+              node1.x = node1.x + force*x/Math.abs(x);
+              node1.y = node1.y + force*y/Math.abs(y);
+              node2.x = node2.x - force*x/Math.abs(x);
+              node2.y = node2.y - force*y/Math.abs(y);
             }
-          });
-        };
-      }
-
-
-        d3.selectAll('input[name=sizeOption]').on("change", function(){
-          var node = svg.selectAll("circle")
-            .data(data)
-            .transition()
-            .duration(1000)
-            .attr("r", makeRadius())
-            .style("fill",  makeColourFromBorough);
-          force.resume();
+          }
         });
-      
-    })
+      };
+    }
+
+    d3.selectAll('input[name=sizeOption]').on("change", function(){
+      var radiusGenerator = makeRadius();
+      var node = svg.selectAll("circle")
+        .data(data)
+        .transition()
+        .duration(1000)
+        .attr("r", radiusGenerator)
+        .selectAll("title")
+        .text(function(d){
+          return d.Name + '\n' + radiusGenerator.caption(d)
+        });
+      force.resume();
+    });
+
+    d3.selectAll('input[name=colourOption]').on("change", function(){
+      var node = svg.selectAll("circle")
+      .data(data)
+      .transition()
+      .duration(1000)
+      .style("fill",  makeColour())
+        .selectAll("title")
+        .text("foo");
+    });
+
   })
+})
