@@ -113,31 +113,49 @@ function makeRadius(){
   }[d3.select('input[name=sizeOption]:checked').node().value]
 }
 
-var palette = d3.scale.category20b();
+function colourFromBorough() {
+  var palette = d3.scale.category20b();
 
-function makeColourFromBorough (d){
-  return palette(boroughs.indexOf(d.borough)%20)
+  function makeColourFromBorough (d){
+    return palette(boroughs.indexOf(d.borough)%20)
+  }
+  makeColourFromBorough.caption = function(d){
+    return "Borough: " + d.borough
+  }
+  return makeColourFromBorough;
 }
 
-function makeColourFromSocialHousingPercent(d){
+function colourFromSocialHousingPercent() {
   var percentToByteScale = d3.scale.linear().range([0,255])
-  .domain([dataBounds.Social_house_percent.min,dataBounds.Social_house_percent.max]);
-  var n = Math.round(percentToByteScale(d.Social_house_percent));
-  return d3.rgb(0,n,n);
+    .domain([dataBounds.Social_house_percent.min,dataBounds.Social_house_percent.max]);
+  function makeColourFromSocialHousingPercent(d){
+    var n = Math.round(percentToByteScale(d.Social_house_percent));
+    return d3.rgb(0,n,n);
+  }
+  makeColourFromSocialHousingPercent.caption = function(d){
+    return "Social housing: " + d.Social_house_percent + "%";
+  }
+  return makeColourFromSocialHousingPercent;
 }
 
-function makeColourFromBAMEPercent(d){
-  var percentToByteScale = d3.scale.linear().range([0,255])
-  .domain([dataBounds.BAME_percent.min,dataBounds.BAME_percent.max]);
-  var n = Math.round(percentToByteScale(d.BAME_percent));
-  return d3.rgb(255-n,n,255-n);
+function colourFromBAMEPercent(){
+  function makeColourFromBAMEPercent(d){
+    var percentToByteScale = d3.scale.linear().range([0,255])
+    .domain([dataBounds.BAME_percent.min,dataBounds.BAME_percent.max]);
+    var n = Math.round(percentToByteScale(d.BAME_percent));
+    return d3.rgb(255-n,n,255-n);
+  }
+  makeColourFromBAMEPercent.cpation = function(d){
+    return "BAME population: " + d.BAME_percent + '%';
+  }
+  return makeColourFromBAMEPercent;
 }
 
 function makeColour(){
   return {
-    "Borough": makeColourFromBorough,
-    "SocialHousingPercent": makeColourFromSocialHousingPercent,
-    "BAME_percent": makeColourFromBAMEPercent,
+    "Borough": colourFromBorough(),
+    "SocialHousingPercent": colourFromSocialHousingPercent(),
+    "BAME_percent": colourFromBAMEPercent(),
   }[d3.select('input[name=colourOption]:checked').node().value]
 }
 
@@ -163,10 +181,11 @@ d3.csv('ward_data.txt', function(wardData){
     .data(data);
 
     var radiusGenerator =  makeRadius();
+    var colourGenerator = makeColour();
     node.enter().append("circle")
     .attr("r",radiusGenerator)
-    .style("fill",  makeColourFromBorough)
-    .append("title").text(function(d){return d.Name + '\n' + radiusGenerator.caption(d)});
+    .style("fill",  colourGenerator)
+    .append("title").text(function(d){return d.Name + '\n' + radiusGenerator.caption(d) + '\n' + colourGenerator.caption(d)});
 
     force.on("tick", function(e) {
       node.each(position(e.alpha));
@@ -198,6 +217,7 @@ d3.csv('ward_data.txt', function(wardData){
     }
 
     d3.selectAll('input[name=sizeOption]').on("change", function(){
+      var colourGenerator = makeColour();
       var radiusGenerator = makeRadius();
       var node = svg.selectAll("circle")
         .data(data)
@@ -205,20 +225,19 @@ d3.csv('ward_data.txt', function(wardData){
         .duration(1000)
         .attr("r", radiusGenerator)
         .selectAll("title")
-        .text(function(d){
-          return d.Name + '\n' + radiusGenerator.caption(d)
-        });
+        .text(function(d){return d.Name + '\n' + radiusGenerator.caption(d) + '\n' + colourGenerator.caption(d)});
       force.resume();
     });
 
     d3.selectAll('input[name=colourOption]').on("change", function(){
+      var colourGenerator = makeColour();
+      var radiusGenerator = makeRadius();
       var node = svg.selectAll("circle")
       .data(data)
       .transition()
       .duration(1000)
-      .style("fill",  makeColour())
-        .selectAll("title")
-        .text("foo");
+      .style("fill",  colourGenerator)
+      .selectAll("title").text(function(d){return d.Name + '\n' + radiusGenerator.caption(d) + '\n' + colourGenerator.caption(d)});
     });
 
   })
