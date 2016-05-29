@@ -1,6 +1,6 @@
-var scale = 5;
+var scale = 4;
 
-var width = 240 * scale;
+var width = 180 * scale;
 var height = 160 * scale;
 
 function group(data){
@@ -43,7 +43,7 @@ var boroughs = [];
 function prepareData(data, locationData){
   var wardlocations = group(locationData);
 
-  var projection = d3.geo.mercator().scale(scale*14000).center([0, 51.5085300]).translate([width/2, height/2]);
+  var projection = d3.geo.mercator().scale(scale*12000).center([-0.1, 51.5085300]).translate([width/2, height/2]);
 
   for (var i in data){
     var code = data[i].Old_Code;
@@ -79,13 +79,21 @@ function radiusFromPopulation () {
 function radiusFromArea(){
   var radiusScale = d3.scale.linear()
     .domain([0,Math.sqrt(dataBounds.Area.max)])
-    .range([3,6*scale]);
+    .range([2,6*scale]);
   var obj = function(d){
     d.radius = radiusScale(Math.sqrt(fix(d.Area)));
     return d.radius;
   };
   obj.caption = function(d){
     return "Area: "+d.Area+"sq. km";
+  };
+  obj.min = {
+    radius: radiusScale(1),
+    caption: "1 sq.km"
+  };
+  obj.max = {
+    radius: radiusScale(Math.sqrt(dataBounds.Area.max)),
+    caption: dataBounds.Area.max + "sq.km"
   };
   return obj;
 }
@@ -176,12 +184,42 @@ d3.csv('ward_data.txt', function(wardData){
     .attr("width", width)
     .attr("height", height);
 
-    var node = svg.selectAll("circle")
+    var key = svg.append("g")
+      .attr("x", 0)
+      .attr("y", 0);
+
+    key.append('rect')
+      .attr("width", 200)
+      .attr("height", 150)
+      .style("stroke", "black")
+      .style("fill", "none");
+
+    var node = svg.selectAll("circle.datum")
     .data(data);
 
     var radiusGenerator =  makeRadius();
     var colourGenerator = makeColour();
+
+    var radmax = key.selectAll("circle.radius.max").data([radiusGenerator.max]);
+
+    radmax.enter()
+      .append('circle')
+      .attr('cx', 30)
+      .attr('cy', 30)
+      .attr("class", "radius max")
+      .attr("r", function(d){
+        return d.radius
+        })
+      .style("fill", d3.rgb(0,0,0));
+    
+    radmax.enter()
+      .append('text')
+      .text(function(d){return d.caption})
+      .attr("x", 60)
+      .attr("y", 30);
+
     node.enter().append("circle")
+    .attr("class", "datum")
     .attr("r",radiusGenerator)
     .style("fill",  colourGenerator)
     .append("title").text(function(d){return d.Name + '\n' + radiusGenerator.caption(d) + '\n' + colourGenerator.caption(d)});
