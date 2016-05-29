@@ -3,28 +3,31 @@ var parse = require('csv-parse');
 var transform = require('stream-transform');
 console.log('start');
 
-
 function fix(d){
-  return typeof(d) === 'string' ? +(d.replace(',','').replace('£','')) : d;
+  return typeof(d) === 'string'
+    ? d == 'n/a'
+      ? 0
+      : +(d.replace(new RegExp(',', 'g'),'').replace('£',''))
+    : d;
 }
 
-  var result = {};
-
 var parser = parse();
-var input = fs.createReadStream('../London_postcode-ONS-postcode-Directory-May15.csv');
+var input = fs.createReadStream('../ward_data.txt');
 var header, min, max;
 var transformation = transform(function(r, c){
-    var d = r;
-    var stub = d[32];
-    if (!result[stub]){
-      result[stub]={count:1, lat:+r[r.length-2], long:+r[r.length-1], stub:stub};
-    } else {
-      result[stub].lat += (+r[r.length-2]-result[stub].lat)/result[stub].count;
-      result[stub].long += (+r[r.length-1]-result[stub].long)/result[stub].count;
-      result[stub].count++;
+  if (!header) {
+    header = r;
+  } else if (!min){
+    min = r.slice();
+    max = r.slice();
+  } else {
+    for (var i in r){
+      min[i] = Math.min(fix(min[i]), fix(r[i]));
+      max[i] = Math.max(fix(max[i]), fix(r[i]));
     }
-
-  //console.log(JSON.stringify(result));
+  }
+  console.log('transform')
+  return true;
 })
 
 
@@ -35,20 +38,16 @@ transformation.on('readable', function(){
 });
 
 
+input.on('end', function(d){
+  var result = {};
+  for (var i in header){
+    result[header[i]] = {min: min[i], max: max[i]};
+  }
 
-var stream = input.pipe(parser).pipe(transformation).pipe(process.stdout);
-
-stream.on('error', function(e){
-console.log(e);
-});
-
-parser.on("finish", function(){
-  // var result = {};
-  // for (var i in header){
-  //   result[header[i]] = {min: min[i], max: max[i]};
-  // }
-console.log('hi!');
+  var output = fs.writeFile('dataBounds.json', "dataBounds = " + JSON.stringify(result));
   console.log(result);
-});
+})
+
+input.pipe(parser).pipe(transformation).pipe(process.stdout);
 
 console.log('done');

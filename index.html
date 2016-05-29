@@ -18,18 +18,13 @@
 </style>
   </head>
   <body>
-    <fieldset>
+    <fieldset id="sizeInput" style="float:left">
       <legend>Size</legend>
-      <input type="radio" name="sizeOption" checked="checked" value="Area">Geographic area</input>
-      <input type="radio" name="sizeOption" value="Population">Population</input>
-      <input type="radio" name="sizeOption" value="Jobs">Number of Jobs</input>
     </fieldset>
-    <fieldset>
+    <fieldset style="float:left" id="colourInput">
       <legend>Colour</legend>
-      <input type="radio" name="colourOption" checked="checked" value="Borough">Borough</input>
-      <input type="radio" name="colourOption" value="SocialHousingPercent">Percentage of social housing</input>
-      <input type="radio" name="colourOption" value="BAME_percent">Percentage of BAME population</input>
     </fieldset>
+    <div style="clear:both"/>
     <script src="vis.js"></script>
   </body>
 
