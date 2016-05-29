@@ -3,22 +3,6 @@ var scale = 4;
 var width = 180 * scale;
 var height = 160 * scale;
 
-function group(data){
-  var result = {};
-  for (var i in data){
-    var d = data[i];
-    var stub = d.statsward;
-    if (!result[stub]){
-      result[stub]={count:1, lat:+d.lat, long:+d.long, stub:stub};
-    } else {
-      result[stub].lat += (d.lat-result[stub].lat)/result[stub].count;
-      result[stub].long += (d.long-result[stub].long)/result[stub].count;
-      result[stub].count++;
-    }
-  }
-  return result;
-}
-
 function position(alpha){
   return function(datum){
     var desired = datum.desiredLocation;
@@ -40,8 +24,7 @@ function fix(d){
 
 var boroughs = [];
 
-function prepareData(data, locationData){
-  var wardlocations = group(locationData);
+function prepareData(data, wardlocations){
 
   var projection = d3.geo.mercator().scale(scale*12000).center([-0.1, 51.5085300]).translate([width/2, height/2]);
 
@@ -166,10 +149,46 @@ function makeColour(){
   }[d3.select('input[name=colourOption]:checked').node().value]
 }
 
-d3.csv('ward_data.txt', function(wardData){
+function drawKey(key, radiusGenerator, colourGenerator)
+{
+      var radkey = key.selectAll("circle.radius.key").data([radiusGenerator.max, radiusGenerator.min]);
 
-  d3.csv('London_postcode-ONS-postcode-Directory-May15.csv', function(locationData){
-    var data = prepareData(wardData, locationData);
+    radkey.enter()
+      .append('circle')
+      .attr('cx', 30)
+      .attr('cy', function(d,i){return 30+(40*i)})
+      .attr("class", "radius key")
+      .attr("r", function(d){
+        return d.radius
+        });
+    
+    radkey.enter()
+      .append('text')
+      .text(function(d){return d.caption})
+      .attr("x", 60)
+      .attr("y", function(d,i){return 30+(40*i)});
+
+      var colkey =  key.selectAll("circle.colour.key").data([colourGenerator.max, colourGenerator.min]);
+
+    radkey.enter()
+      .append('circle')
+      .attr('cx', 30)
+      .attr('cy', function(d,i){return 100+(40*i)})
+      .attr("class", "radius key")
+      .style("fill", function(d){
+        return d.colour
+        })
+      .attr("r", 10);
+    
+    radkey.enter()
+      .append('text')
+      .text(function(d){return d.caption})
+      .attr("x", 60)
+      .attr("y", function(d,i){return 100+(40*i)});
+}
+
+d3.csv('ward_data.txt', function(wardData){
+    var data = prepareData(wardData, wardCentres);
 
     var force = d3.layout.force()
     .gravity(0.0)
@@ -200,23 +219,7 @@ d3.csv('ward_data.txt', function(wardData){
     var radiusGenerator =  makeRadius();
     var colourGenerator = makeColour();
 
-    var radmax = key.selectAll("circle.radius.max").data([radiusGenerator.max]);
-
-    radmax.enter()
-      .append('circle')
-      .attr('cx', 30)
-      .attr('cy', 30)
-      .attr("class", "radius max")
-      .attr("r", function(d){
-        return d.radius
-        })
-      .style("fill", d3.rgb(0,0,0));
-    
-    radmax.enter()
-      .append('text')
-      .text(function(d){return d.caption})
-      .attr("x", 60)
-      .attr("y", 30);
+    drawKey(key, radiusGenerator, colourGenerator);
 
     node.enter().append("circle")
     .attr("class", "datum")
@@ -256,7 +259,7 @@ d3.csv('ward_data.txt', function(wardData){
     d3.selectAll('input[name=sizeOption]').on("change", function(){
       var colourGenerator = makeColour();
       var radiusGenerator = makeRadius();
-      var node = svg.selectAll("circle")
+      var node = svg.selectAll("circle.datum")
         .data(data)
         .transition()
         .duration(700)
@@ -269,7 +272,7 @@ d3.csv('ward_data.txt', function(wardData){
     d3.selectAll('input[name=colourOption]').on("change", function(){
       var colourGenerator = makeColour();
       var radiusGenerator = makeRadius();
-      var node = svg.selectAll("circle")
+      var node = svg.selectAll("circle.datum")
       .data(data)
       .transition()
       .duration(700)
@@ -278,4 +281,3 @@ d3.csv('ward_data.txt', function(wardData){
     });
 
   })
-})
