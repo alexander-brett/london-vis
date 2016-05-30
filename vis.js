@@ -44,14 +44,14 @@ function radiusFromProperty(caption, property, maxSize, radiusScale) {
 }
 
 function radiusFromPropertyLinear(caption, property, maxSize) {
- return radiusFromProperty(caption, property, maxSize, d3.scale.linear().domain([0,dataBounds[property][1]])
-    .range([0,maxSize*scale]));
+ return //radiusFromProperty(caption, property, maxSize, d3.scale.linear().domain([0,dataBounds[property][1]])
+    //.range([0,maxSize*scale]));
 }
 
 
 function radiusFromPropertySqrt(caption, property, maxSize) {
- return radiusFromProperty(caption, property, maxSize, d3.scale.sqrt().domain([0,dataBounds[property][1]])
-    .range([0,maxSize*scale]));
+ //return radiusFromProperty(caption, property, maxSize, d3.scale.sqrt().domain([0,dataBounds[property][1]])
+   // .range([0,maxSize*scale]));
 }
 
 var radiusMap = {
@@ -89,7 +89,7 @@ function colourFromBorough() {
 }
 
 function colourFromGenericPercent(caption, index){
-  var percentToByteScale = d3.scale.linear().range([0,255])
+ /* var percentToByteScale = d3.scale.linear().range([0,255])
     .domain(dataBounds[index]);
   function c(a){
     var n = Math.round(percentToByteScale(a));
@@ -108,7 +108,7 @@ function colourFromGenericPercent(caption, index){
     colour: c(dataBounds[index][0]),
     caption: dataBounds[index][0]+"% " + caption
   }];
-  return makeColour;
+  return makeColour;*/
 }
 
 var colourMap = {
@@ -196,10 +196,50 @@ function drawColourKey(base, colourGenerator)
     .attr("y", function(d,i){return 30+(40*i)});
 }
 
-function doRadii(radii, nodes){
+
+var radiusFromArea = function(db){
+  var radiusQuery = db.exec(
+    "SELECT max(area) FROM area;"
+    + "SELECT area FROM area ORDER BY id ASC;"
+  );
+  var values = radiusQuery[1].values.map(function(d){return d[0]});
+  var convert = d3.scale.sqrt().domain([0,radiusQuery[0].values[0][0]]).range([0,6*scale]);
+  this.caption = function(i){return values[i] + "sq. km"};
+  this.radius = function(i){return convert(values[i])};
+  return this;
+}
+
+var colourFromBorough = function(db){
+  var boroughQuery = db.exec(
+    "SELECT DISTINCT borough FROM boroughs;"
+   + "SELECT borough FROM boroughs ORDER BY id ASC");
+  var boroughs = boroughQuery[0].values.map(function(d){return d[0]});
+  var values = boroughQuery[1].values.map(function(d){return boroughs.indexOf(d[0])});
+  var palette = d3.scale.category20b();
+  this.caption = function(i){return boroughs[values[i]]};
+  this.colour = function(i){return palette(values[i]%19)};
+  return this;
+}
+
+function doRadii(generator, nodes){
   nodes.attr('r', function(d,i){
-    d.radius = radii[i];
+    d.radius = generator.radius(i);
+    d.radiusCaption = generator.caption(i);
     return d.radius;
+  })
+}
+
+function doColours(generator, nodes){
+  nodes.style('fill', function(d,i){
+    d.colour = generator.colour(i);
+    d.colourCaption = generator.caption(i);
+    return d.colour;
+  })
+}
+
+function doCaption(nodes){
+  nodes.selectAll('title').text(function(d){
+    return d.name +"\n" + d.radiusCaption + "\n" + d.colourCaption;
   })
 }
 
@@ -224,13 +264,12 @@ function startForce(data, db){
       return d.name
       });
 
-    var radii = db.exec("SELECT area FROM area ORDER BY id ASC")[0]
-      .values.map(function(d){return d[0]});
     //var colourGenerator = makeColour(db);
 
     //drawRadiusKey(svg, radiusGenerator);
     //drawColourKey(svg, colourGenerator);
-    doRadii(radii, nodes);
+    doRadii(radiusFromArea(db), nodes);
+    doColours(colourFromBorough(db), nodes);
 
     force.on("tick", function(e) {
       nodes.each(position(e.alpha));
