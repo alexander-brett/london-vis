@@ -22,42 +22,25 @@ function fix(d){
     : d;
 }
 
-var boroughs = [];
-
-function prepareData(data, wardlocations){
-  var projection = d3.geo.mercator().scale(scale*12000).center([-0.1, 51.5085300]).translate([width/2, height/2]);
-  for (var i in data){
-    var code = data[i].Old_Code;
-    data[i].lat = wardlocations[code].lat;
-    data[i].long = wardlocations[code].long;
-    data[i].desiredLocation = projection([data[i].long, data[i].lat]);
-    data[i].radius =
-    data[i].x = data[i].desiredLocation[0];
-    data[i].y = data[i].desiredLocation[1];
-    data[i].borough = data[i].Name.split('-')[0];
-    if (boroughs.indexOf(data[i].borough) < 0) boroughs.push(data[i].borough);
-  }
-  return data;
-}
-
-
 function radiusFromProperty(caption, property, maxSize, radiusScale) {
-    
-  var obj = function(d){
-    d.radius = radiusScale(fix(d[property]));
-    return d.radius;
+  return function(db){
+    var obj = function(d){
+      d.radius = radiusScale(fix(d[property]));
+      return d.radius;
+    }
+    obj.data = db.exec("SELECT area FROM area ORDER BY id ASC");
+    obj.caption = function(d){
+      return caption + ": " + d;
+    };
+    obj.key = [{
+      radius: radiusScale(fix(dataBounds[property][0])),
+      caption: dataBounds[property][0] + ' ' +caption
+    }, {
+      radius: radiusScale(fix(dataBounds[property][1])),
+      caption: dataBounds[property][1] + ' ' +caption
+    }];
+    return obj;
   }
-  obj.caption = function(d){
-    return caption + ": " + d[property];
-  };
-  obj.key = [{
-    radius: radiusScale(fix(dataBounds[property][0])),
-    caption: dataBounds[property][0] + ' ' +caption
-  }, {
-    radius: radiusScale(fix(dataBounds[property][1])),
-    caption: dataBounds[property][1] + ' ' +caption
-  }];
-  return obj;
 }
 
 function radiusFromPropertyLinear(caption, property, maxSize) {
@@ -88,8 +71,8 @@ sizeInputs.append('input')
 sizeInputs.append('span').html(function(d){return d});
 
 
-function makeRadius(){
-  return radiusMap[d3.select('input[name=sizeOption]:checked').node().value]
+function makeRadius(db){
+  return radiusMap[d3.select('input[name=sizeOption]:checked').node().value](db)
 }
 
 function colourFromBorough() {
@@ -138,10 +121,9 @@ var colourMap = {
     "Borough": colourFromBorough(),
   };
 
-function makeColour(){
-  return colourMap[d3.select('input[name=colourOption]:checked').node().value]
+function makeColour(db){
+  return colourMap[d3.select('input[name=colourOption]:checked').node().value](db)
 }
-
 
 colourInputs = d3.select('#colourInput').selectAll("input").data(Object.keys(colourMap)).enter().append('div');
 colourInputs.append('input')
@@ -214,13 +196,18 @@ function drawColourKey(base, colourGenerator)
     .attr("y", function(d,i){return 30+(40*i)});
 }
 
-d3.csv('ward_data.txt', function(wardData){
-    var data = prepareData(wardData, wardCentres);
+function doRadii(radii, nodes){
+  nodes.attr('r', function(d,i){
+    d.radius = radii[i];
+    return d.radius;
+  })
+}
 
+function startForce(data, db){
     var force = d3.layout.force()
     .gravity(0.0)
     .friction(0.1)
-    .charge(function(d){return -1*makeRadius()(d)})
+    .charge(function(d){return -1*d.radius})
     .nodes(data)
     .size([width, height]);
 
@@ -230,33 +217,35 @@ d3.csv('ward_data.txt', function(wardData){
     .attr("width", width)
     .attr("height", height);
 
-    var node = svg.selectAll("circle.datum")
-    .data(data);
+    var nodes = svg.selectAll("circle.datum").data(data).enter().append("circle")
+    .attr("class", "datum");
+    
+    nodes.append("title").text(function(d){
+      return d.name
+      });
 
-    var radiusGenerator =  makeRadius();
-    var colourGenerator = makeColour();
+    var radii = db.exec("SELECT area FROM area ORDER BY id ASC")[0]
+      .values.map(function(d){return d[0]});
+    //var colourGenerator = makeColour(db);
 
-    drawRadiusKey(svg, radiusGenerator);
-    drawColourKey(svg, colourGenerator);
-
-    node.enter().append("circle")
-    .attr("class", "datum")
-    .attr("r",radiusGenerator)
-    .style("fill",  colourGenerator)
-    .append("title").text(function(d){return d.Name + '\n' + radiusGenerator.caption(d) + '\n' + colourGenerator.caption(d)});
+    //drawRadiusKey(svg, radiusGenerator);
+    //drawColourKey(svg, colourGenerator);
+    doRadii(radii, nodes);
 
     force.on("tick", function(e) {
-      node.each(position(e.alpha));
-      node.each(collide(e.alpha));
+      nodes.each(position(e.alpha));
+      nodes.each(collide(e.alpha));
 
-      node
-      .attr("cx", function(d) { return d.x; })
+      nodes
+      .attr("cx", function(d) {
+        return d.x;
+          })
       .attr("cy", function(d) { return d.y; });
     });
 
     function collide(alpha) {
       return function(node1) {
-        node.each(function(node2) {
+        nodes.each(function(node2) {
           if(node1 != node2) {
             var x = node1.x - node2.x;
             var y = node1.y - node2.y;
@@ -276,8 +265,8 @@ d3.csv('ward_data.txt', function(wardData){
     }
 
     d3.selectAll('input[name=sizeOption]').on("change", function(){
-      var colourGenerator = makeColour();
-      var radiusGenerator = makeRadius();
+      var colourGenerator = makeColour(db);
+      var radiusGenerator = makeRadius(db);
 
       drawRadiusKey(svg, radiusGenerator);
 
@@ -292,8 +281,8 @@ d3.csv('ward_data.txt', function(wardData){
     });
 
     d3.selectAll('input[name=colourOption]').on("change", function(){
-      var colourGenerator = makeColour();
-      var radiusGenerator = makeRadius();
+      var colourGenerator = makeColour(db);
+      var radiusGenerator = makeRadius(db);
 
       
       drawColourKey(svg, colourGenerator);
@@ -306,5 +295,31 @@ d3.csv('ward_data.txt', function(wardData){
       .selectAll("title").text(function(d){return d.Name + '\n' + radiusGenerator.caption(d) + '\n' + colourGenerator.caption(d)});
 
     });
+}
 
-  })
+
+var xhr = new XMLHttpRequest();
+xhr.open('GET', 'sqlite/data.db', true);
+xhr.responseType = 'arraybuffer';
+xhr.onload = function(e) {
+  var uInt8Array = new Uint8Array(this.response);
+  var db = new SQL.Database(uInt8Array);
+  var contents = db.exec(
+    "SELECT * from boroughs JOIN locations ON boroughs.id = locations.id ORDER BY boroughs.id ASC"
+  );
+  // contents is now [{columns:['col1','col2',...], values:[[first row], [second row], ...]}]
+  var projection = d3.geo.mercator().scale(scale*12000).center([-0.1, 51.5085300]).translate([width/2, height/2]);
+  var data = contents[0].values.map(function(row){
+    var result = {};
+    for (var i in contents[0].columns){
+      result[contents[0].columns[i]]=row[i];
+    }
+
+    result.desiredLocation = projection([result.long, result.lat]);
+    result.x = result.desiredLocation[0];
+    result.y = result.desiredLocation[1];
+    return result;
+  });
+  startForce(data, db);
+};
+xhr.send();
