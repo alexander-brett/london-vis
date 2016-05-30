@@ -40,31 +40,9 @@ function prepareData(data, wardlocations){
   return data;
 }
 
-function radiusFromPropertySqrt(caption, property, maxSize) {
-  var radiusScale = d3.scale.sqrt()
-    .domain([0,dataBounds[property][1]])
-    .range([0,maxSize*scale]);
-  var obj = function(d){
-    d.radius = radiusScale(fix(d[property]));
-    return d.radius;
-  }
-  obj.caption = function(d){
-    return caption + ": " + d[property];
-  };
-  obj.key = [{
-    radius: radiusScale(dataBounds[property][0]),
-    caption: dataBounds[property][0] + ' ' +caption
-  }, {
-    radius: radiusScale(dataBounds[property][1]),
-    caption: dataBounds[property][1] + ' ' +caption
-  }];
-  return obj;
-}
 
-function radiusFromPropertyLinear(caption, property, maxSize) {
-  var radiusScale = d3.scale.linear()
-    .domain([0,dataBounds[property][1]])
-    .range([0,maxSize*scale]);
+function radiusFromProperty(caption, property, maxSize, radiusScale) {
+    
   var obj = function(d){
     d.radius = radiusScale(fix(d[property]));
     return d.radius;
@@ -80,6 +58,17 @@ function radiusFromPropertyLinear(caption, property, maxSize) {
     caption: dataBounds[property][1] + ' ' +caption
   }];
   return obj;
+}
+
+function radiusFromPropertyLinear(caption, property, maxSize) {
+ return radiusFromProperty(caption, property, maxSize, d3.scale.linear().domain([0,dataBounds[property][1]])
+    .range([0,maxSize*scale]));
+}
+
+
+function radiusFromPropertySqrt(caption, property, maxSize) {
+ return radiusFromProperty(caption, property, maxSize, d3.scale.sqrt().domain([0,dataBounds[property][1]])
+    .range([0,maxSize*scale]));
 }
 
 var radiusMap = {
@@ -145,6 +134,7 @@ var colourMap = {
     "Employment rate (16-64) - 2011": colourFromGenericPercent('Employment rate', 'Employment_rate'),
     "% Flat, maisonette or apartment - 2011": colourFromGenericPercent('Apartments', 'Apartment_percent'),
     'Claimant rate of key out-of-work benefits (working age client group) (2014)': colourFromGenericPercent('OOW Benefits Recipients', 'Out_of_work_benefints_percent'),
+    "Turnout at Mayoral election - 2012":colourFromGenericPercent('Turnout', 'Mayoral_turnout'),
     "Borough": colourFromBorough(),
   };
 
