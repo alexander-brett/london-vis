@@ -1,5 +1,4 @@
 var scale = 4;
-
 var width = 180 * scale;
 var height = 160 * scale;
 
@@ -14,6 +13,27 @@ function position(alpha){
   }
 }
 
+function collide(nodes, alpha) {
+  return function(node1) {
+    nodes.each(function(node2) {
+      if(node1 != node2) {
+        var x = node1.x - node2.x;
+        var y = node1.y - node2.y;
+        var distance = Math.sqrt(x * x + y * y);
+        var minDistance = node1.radius + node2.radius + scale;
+        var ratio = (scale+node2.radius) / (scale+node1.radius);
+        var force =distance < minDistance ?  0.2*(minDistance - distance) : 0;
+        if(force > 0) {
+          node1.x = node1.x + ratio*force*x/Math.abs(x);
+          node1.y = node1.y + ratio*force*y/Math.abs(y);
+          node2.x = node2.x - (1/ratio)*force*x/Math.abs(x);
+          node2.y = node2.y - (1/ratio)*force*y/Math.abs(y);
+        }
+      }
+    });
+  };
+}
+
 function fix(d){
   return typeof(d) === 'string'
     ? d == 'n/a'
@@ -22,44 +42,38 @@ function fix(d){
     : d;
 }
 
-function radiusFromProperty(caption, property, maxSize, radiusScale) {
+function radiusFromProperty(table, column, label, size){
   return function(db){
-    var obj = function(d){
-      d.radius = radiusScale(fix(d[property]));
-      return d.radius;
-    }
-    obj.data = db.exec("SELECT area FROM area ORDER BY id ASC");
-    obj.caption = function(d){
-      return caption + ": " + d;
+    var query = db.exec(
+      "SELECT max("+column+"), min("+column+") FROM "+table+";"
+      + "SELECT "+column+" FROM "+table+" ORDER BY id ASC;"
+    );
+    var values = query[1].values.map(function(d){return d[0]});
+    var min = query[0].values[0][1];
+    var max = query[0].values[0][0];
+    var convert = d3.scale.sqrt().domain([0,fix(max)]).range([0,size*scale]);
+    this.caption = function(i){return values[i] + label};
+    this.radius = function(i){
+      return convert(fix(values[i]))
     };
-    obj.key = [{
-      radius: radiusScale(fix(dataBounds[property][0])),
-      caption: dataBounds[property][0] + ' ' +caption
-    }, {
-      radius: radiusScale(fix(dataBounds[property][1])),
-      caption: dataBounds[property][1] + ' ' +caption
+    this.key = [{
+      caption: min + label,
+      radius: convert(fix(min))
+    },{
+      caption: max + label,
+      radius: convert(fix(max))
     }];
-    return obj;
+    return this;
   }
 }
 
-function radiusFromPropertyLinear(caption, property, maxSize) {
- return //radiusFromProperty(caption, property, maxSize, d3.scale.linear().domain([0,dataBounds[property][1]])
-    //.range([0,maxSize*scale]));
-}
-
-
-function radiusFromPropertySqrt(caption, property, maxSize) {
- //return radiusFromProperty(caption, property, maxSize, d3.scale.sqrt().domain([0,dataBounds[property][1]])
-   // .range([0,maxSize*scale]));
-}
-
 var radiusMap = {
-    "Population - 2015": radiusFromPropertyLinear('Population', 'Population', 3.2),
-    "Number of jobs in area - 2013": radiusFromPropertySqrt('Jobs', 'Jobs', 7),
-    "In employment (16-64) - 2011": radiusFromPropertyLinear('Employed', 'Employed', 3.2),
-    "Median House Price (£) - 2014": radiusFromPropertySqrt('Median house price', 'Median_house_price', 3.5),
-    "Area - Square Kilometres": radiusFromPropertySqrt('Sq km', 'Area', 6.2),
+    //"Population - 2015": radiusFromPropertyLinear('Population', 'Population', 3.2),
+    //"Number of jobs in area - 2013": radiusFromPropertySqrt('Jobs', 'Jobs', 7),
+    //"In employment (16-64) - 2011": radiusFromPropertyLinear('Employed', 'Employed', 3.2),
+    //"Median House Price (£) - 2014": radiusFromPropertySqrt('Median house price', 'Median_house_price', 3.5),
+    "Mayoral election 2015 turnout": radiusFromProperty("voting", "turnout", " voters", 2.5),
+    "Area - Square Kilometres": radiusFromProperty("area", "area", "sq. km", 6.2),
   };
 
 sizeInputs = d3.select('#sizeInput').selectAll("input").data(Object.keys(radiusMap)).enter().append('div');
@@ -70,55 +84,55 @@ sizeInputs.append('input')
   .attr('value', function(d){return d});
 sizeInputs.append('span').html(function(d){return d});
 
-
 function makeRadius(db){
   return radiusMap[d3.select('input[name=sizeOption]:checked').node().value](db)
 }
 
-function colourFromBorough() {
-  var palette = d3.scale.category20b();
-
-  function makeColourFromBorough (d){
-    return palette(boroughs.indexOf(d.borough)%20)
+var colourFromBorough = function(){
+  return function(db){
+    var boroughQuery = db.exec(
+      "SELECT DISTINCT borough FROM boroughs;"
+     + "SELECT borough FROM boroughs ORDER BY id ASC");
+    var boroughs = boroughQuery[0].values.map(function(d){return d[0]});
+    var values = boroughQuery[1].values.map(function(d){return boroughs.indexOf(d[0])});
+    var palette = d3.scale.category20();
+    this.caption = function(i){return boroughs[values[i]]};
+    this.colour = function(i){return palette(values[i]%20)};
+    this.key = [];
+    return this;
   }
-  makeColourFromBorough.caption = function(d){
-    return "Borough: " + d.borough
-  };
-  makeColourFromBorough.key = [];
-  return makeColourFromBorough;
 }
 
-function colourFromGenericPercent(caption, index){
- /* var percentToByteScale = d3.scale.linear().range([0,255])
-    .domain(dataBounds[index]);
-  function c(a){
-    var n = Math.round(percentToByteScale(a));
-    return d3.rgb(255-n,n,255-n);
+var colourFromMayor = function(){
+  return function(db){
+    var mayorQuery = db.exec(
+      "SELECT winner FROM voting ORDER BY id ASC");
+    var values = mayorQuery[0].values.map(function(d){return d[0]});
+    var sadiq = d3.rgb(255,0,0);
+    var zac = d3.rgb(0,0,255);
+    var colours = {'Sadiq Aman Khan - Labour Party' : sadiq, 'Zac Goldsmith - The Conservative Party': zac};
+    this.caption = function(i){return values[i]};
+    this.colour = function(i){return colours[values[i]]};
+    this.key = [{
+      caption:'Zac Goldsmith - The Conservative Party',
+      colour: zac
+    },{
+      caption: 'Sadiq Aman Khan - Labour Party',
+      colour: sadiq
+    }];
+    return this;
   }
-  function makeColour(d){
-    return c(d[index]);
-  }
-  makeColour.caption = function(d){
-    return caption + ": " + d[index] + '%';
-  }
-  makeColour.key = [{
-    colour: c(dataBounds[index][1]),
-    caption: dataBounds[index][1]+"% " + caption
-  }, {
-    colour: c(dataBounds[index][0]),
-    caption: dataBounds[index][0]+"% " + caption
-  }];
-  return makeColour;*/
 }
 
 var colourMap = {
-    "% Households Social Rented - 2011": colourFromGenericPercent('Social housing', 'Social_house_percent'),
-    "% BAME - 2011": colourFromGenericPercent('BAME Population', 'BAME_percent'),
-    "Employment rate (16-64) - 2011": colourFromGenericPercent('Employment rate', 'Employment_rate'),
-    "% Flat, maisonette or apartment - 2011": colourFromGenericPercent('Apartments', 'Apartment_percent'),
-    'Claimant rate of key out-of-work benefits (working age client group) (2014)': colourFromGenericPercent('OOW Benefits Recipients', 'Out_of_work_benefints_percent'),
-    "Turnout at Mayoral election - 2012":colourFromGenericPercent('Turnout', 'Mayoral_turnout'),
+    //"% Households Social Rented - 2011": colourFromGenericPercent('Social housing', 'Social_house_percent'),
+    //"% BAME - 2011": colourFromGenericPercent('BAME Population', 'BAME_percent'),
+    //"Employment rate (16-64) - 2011": colourFromGenericPercent('Employment rate', 'Employment_rate'),
+    //"% Flat, maisonette or apartment - 2011": colourFromGenericPercent('Apartments', 'Apartment_percent'),
+    //'Claimant rate of key out-of-work benefits (working age client group) (2014)': colourFromGenericPercent('OOW Benefits Recipients', 'Out_of_work_benefints_percent'),
+    //"Turnout at Mayoral election - 2012":colourFromGenericPercent('Turnout', 'Mayoral_turnout'),
     "Borough": colourFromBorough(),
+    "Mayoral election 2016 result": colourFromMayor()
   };
 
 function makeColour(db){
@@ -131,15 +145,11 @@ colourInputs.append('input')
   .attr('checked', function(d, i){ return d=="Area" ? "true" : "false"})
   .attr('name', 'colourOption')
   .attr('value', function(d){return d});
-
 colourInputs.append('span').html(function(d){return d});
 
-function drawRadiusKey(base, radiusGenerator)
-{
+function drawRadiusKey(base, radiusGenerator){
   var radkey = base.selectAll("circle.radius.key").data(radiusGenerator.key);
-
   radkey.transition().attr("r", function(d){return d.radius})
-
   radkey.enter()
     .append('circle')
     .attr('cx', 30)
@@ -150,9 +160,7 @@ function drawRadiusKey(base, radiusGenerator)
     .style("stroke", "black");
 
   var radcaption =  base.selectAll("text.radius.key").data(radiusGenerator.key);
-
   radcaption.text(function(d){return d.caption});
-
   radcaption.enter()
     .append('text')
     .attr("alignment-baseline", "middle")
@@ -163,15 +171,10 @@ function drawRadiusKey(base, radiusGenerator)
 
 }
 
-function drawColourKey(base, colourGenerator)
-{
-
+function drawColourKey(base, colourGenerator){
   var colkey =  base.selectAll("circle.colour.key").data(colourGenerator.key);
-
   colkey.transition().duration(700).style("fill", function(d){return d.colour});
-
   colkey.exit().remove();
-
   colkey.enter()
     .append('circle')
     .attr('cx', width-30)
@@ -181,11 +184,8 @@ function drawColourKey(base, colourGenerator)
     .attr("r", 10);
 
   var colcaption = base.selectAll("text.colour.key").data(colourGenerator.key);
-  
   colcaption.text(function(d){return d.caption});
-
   colcaption.exit().remove();
-
   colcaption.enter()
     .append('text')
     .attr("alignment-baseline", "middle")
@@ -194,31 +194,6 @@ function drawColourKey(base, colourGenerator)
     .text(function(d){return d.caption})
     .attr("x", width - 60)
     .attr("y", function(d,i){return 30+(40*i)});
-}
-
-
-var radiusFromArea = function(db){
-  var radiusQuery = db.exec(
-    "SELECT max(area) FROM area;"
-    + "SELECT area FROM area ORDER BY id ASC;"
-  );
-  var values = radiusQuery[1].values.map(function(d){return d[0]});
-  var convert = d3.scale.sqrt().domain([0,radiusQuery[0].values[0][0]]).range([0,6*scale]);
-  this.caption = function(i){return values[i] + "sq. km"};
-  this.radius = function(i){return convert(values[i])};
-  return this;
-}
-
-var colourFromBorough = function(db){
-  var boroughQuery = db.exec(
-    "SELECT DISTINCT borough FROM boroughs;"
-   + "SELECT borough FROM boroughs ORDER BY id ASC");
-  var boroughs = boroughQuery[0].values.map(function(d){return d[0]});
-  var values = boroughQuery[1].values.map(function(d){return boroughs.indexOf(d[0])});
-  var palette = d3.scale.category20b();
-  this.caption = function(i){return boroughs[values[i]]};
-  this.colour = function(i){return palette(values[i]%19)};
-  return this;
 }
 
 function doRadii(generator, nodes){
@@ -264,78 +239,39 @@ function startForce(data, db){
       return d.name
       });
 
-    //var colourGenerator = makeColour(db);
+    var radiusGenerator = makeRadius(db);
+    doRadii(radiusGenerator, nodes);
+    drawRadiusKey(svg, radiusGenerator);
 
-    //drawRadiusKey(svg, radiusGenerator);
-    //drawColourKey(svg, colourGenerator);
-    doRadii(radiusFromArea(db), nodes);
-    doColours(colourFromBorough(db), nodes);
+    var colourGenerator = makeColour(db);
+    doColours(colourGenerator, nodes);
+    drawColourKey(svg, colourGenerator);
+
+    doCaption(nodes);
 
     force.on("tick", function(e) {
       nodes.each(position(e.alpha));
-      nodes.each(collide(e.alpha));
-
+      nodes.each(collide(nodes, e.alpha));
       nodes
-      .attr("cx", function(d) {
-        return d.x;
-          })
-      .attr("cy", function(d) { return d.y; });
+        .attr("cx", function(d) { return d.x; })
+        .attr("cy", function(d) { return d.y; });
     });
-
-    function collide(alpha) {
-      return function(node1) {
-        nodes.each(function(node2) {
-          if(node1 != node2) {
-            var x = node1.x - node2.x;
-            var y = node1.y - node2.y;
-            var distance = Math.sqrt(x * x + y * y);
-            var minDistance = node1.radius + node2.radius + scale;
-            var ratio = (scale+node2.radius) / (scale+node1.radius);
-            var force =distance < minDistance ?  0.2*(minDistance - distance) : 0;
-            if(force > 0) {
-              node1.x = node1.x + ratio*force*x/Math.abs(x);
-              node1.y = node1.y + ratio*force*y/Math.abs(y);
-              node2.x = node2.x - (1/ratio)*force*x/Math.abs(x);
-              node2.y = node2.y - (1/ratio)*force*y/Math.abs(y);
-            }
-          }
-        });
-      };
-    }
-
+   
     d3.selectAll('input[name=sizeOption]').on("change", function(){
-      var colourGenerator = makeColour(db);
       var radiusGenerator = makeRadius(db);
-
       drawRadiusKey(svg, radiusGenerator);
-
-      var node = svg.selectAll("circle.datum")
-        .data(data)
-        .transition()
-        .duration(700)
-        .attr("r", radiusGenerator)
-        .selectAll("title")
-        .text(function(d){return d.Name + '\n' + radiusGenerator.caption(d) + '\n' + colourGenerator.caption(d)});
+      doRadii(radiusGenerator, nodes.transition().duration(700));
+      doCaption(nodes);
       force.resume();
     });
 
     d3.selectAll('input[name=colourOption]').on("change", function(){
-      var colourGenerator = makeColour(db);
-      var radiusGenerator = makeRadius(db);
-
-      
+      var colourGenerator = makeColour(db);      
       drawColourKey(svg, colourGenerator);
-
-      var node = svg.selectAll("circle.datum")
-      .data(data)
-      .transition()
-      .duration(700)
-      .style("fill",  colourGenerator)
-      .selectAll("title").text(function(d){return d.Name + '\n' + radiusGenerator.caption(d) + '\n' + colourGenerator.caption(d)});
-
+      doColours(colourGenerator, nodes.transition().duration(700));
+      doCaption(nodes);
     });
 }
-
 
 var xhr = new XMLHttpRequest();
 xhr.open('GET', 'sqlite/data.db', true);
@@ -343,22 +279,21 @@ xhr.responseType = 'arraybuffer';
 xhr.onload = function(e) {
   var uInt8Array = new Uint8Array(this.response);
   var db = new SQL.Database(uInt8Array);
-  var contents = db.exec(
+  var statement = db.prepare(
     "SELECT * from boroughs JOIN locations ON boroughs.id = locations.id ORDER BY boroughs.id ASC"
   );
-  // contents is now [{columns:['col1','col2',...], values:[[first row], [second row], ...]}]
-  var projection = d3.geo.mercator().scale(scale*12000).center([-0.1, 51.5085300]).translate([width/2, height/2]);
-  var data = contents[0].values.map(function(row){
-    var result = {};
-    for (var i in contents[0].columns){
-      result[contents[0].columns[i]]=row[i];
-    }
-
+  var projection = d3.geo.mercator()
+    .scale(scale*12000)
+    .center([-0.1, 51.5085300])
+    .translate([width/2, height/2]);
+  var data = [];
+  while(statement.step()){
+    var result = statement.getAsObject();
     result.desiredLocation = projection([result.long, result.lat]);
     result.x = result.desiredLocation[0];
     result.y = result.desiredLocation[1];
-    return result;
-  });
+    data.push(result);
+   }
   startForce(data, db);
 };
 xhr.send();
