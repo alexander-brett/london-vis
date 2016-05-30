@@ -7,7 +7,7 @@ function fix(d){
   return typeof(d) === 'string'
     ? d == 'n/a'
       ? 0
-      : +(d.replace(new RegExp(',', 'g'),'').replace('£',''))
+      : +(d.trim().replace(new RegExp(',', 'g'),'').replace('£',''))
     : d;
 }
 
@@ -18,12 +18,12 @@ var transformation = transform(function(r, c){
   if (!header) {
     header = r;
   } else if (!min){
-    min = r.slice();
-    max = r.slice();
+    min = r.map(fix);
+    max = r.map(fix);
   } else {
     for (var i in r){
-      min[i] = Math.min(fix(min[i]), fix(r[i]));
-      max[i] = Math.max(fix(max[i]), fix(r[i]));
+      min[i] = Math.min(min[i], fix(r[i]));
+      max[i] = Math.max(max[i], fix(r[i]));
     }
   }
   console.log('transform')

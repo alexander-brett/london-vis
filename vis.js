@@ -42,7 +42,7 @@ function prepareData(data, wardlocations){
 
 function radiusFromPropertySqrt(caption, property, maxSize) {
   var radiusScale = d3.scale.sqrt()
-    .domain([0, fix(dataBounds[property].max)])
+    .domain([0,dataBounds[property][1]])
     .range([0,maxSize*scale]);
   var obj = function(d){
     d.radius = radiusScale(fix(d[property]));
@@ -52,18 +52,18 @@ function radiusFromPropertySqrt(caption, property, maxSize) {
     return caption + ": " + d[property];
   };
   obj.key = [{
-    radius: radiusScale(fix(dataBounds[property].min)),
-    caption: dataBounds[property].min + ' ' +caption
+    radius: radiusScale(dataBounds[property][0]),
+    caption: dataBounds[property][0] + ' ' +caption
   }, {
-    radius: radiusScale(fix(dataBounds[property].max)),
-    caption: dataBounds[property].max + ' ' +caption
+    radius: radiusScale(dataBounds[property][1]),
+    caption: dataBounds[property][1] + ' ' +caption
   }];
   return obj;
 }
 
 function radiusFromPropertyLinear(caption, property, maxSize) {
   var radiusScale = d3.scale.linear()
-    .domain([0, fix(dataBounds[property].max)])
+    .domain([0,dataBounds[property][1]])
     .range([0,maxSize*scale]);
   var obj = function(d){
     d.radius = radiusScale(fix(d[property]));
@@ -73,21 +73,21 @@ function radiusFromPropertyLinear(caption, property, maxSize) {
     return caption + ": " + d[property];
   };
   obj.key = [{
-    radius: radiusScale(fix(dataBounds[property].min)),
-    caption: dataBounds[property].min + ' ' +caption
+    radius: radiusScale(fix(dataBounds[property][0])),
+    caption: dataBounds[property][0] + ' ' +caption
   }, {
-    radius: radiusScale(fix(dataBounds[property].max)),
-    caption: dataBounds[property].max + ' ' +caption
+    radius: radiusScale(fix(dataBounds[property][1])),
+    caption: dataBounds[property][1] + ' ' +caption
   }];
   return obj;
 }
 
 var radiusMap = {
-    "Population": radiusFromPropertyLinear('Population', 'Population', 3.2),
-    "Jobs": radiusFromPropertySqrt('Jobs', 'Jobs', 7),
-    "Employed": radiusFromPropertyLinear('Employed', 'Employed', 2.7),
-    "Median house price": radiusFromPropertyLinear('Median house price', 'Median_house_price', 2),
-    "Area": radiusFromPropertySqrt('Sq km', 'Area', 6),
+    "Population - 2015": radiusFromPropertyLinear('Population', 'Population', 3.2),
+    "Number of jobs in area - 2013": radiusFromPropertySqrt('Jobs', 'Jobs', 7),
+    "In employment (16-64) - 2011": radiusFromPropertyLinear('Employed', 'Employed', 3.2),
+    "Median House Price (£) - 2014": radiusFromPropertySqrt('Median house price', 'Median_house_price', 3.5),
+    "Area - Square Kilometres": radiusFromPropertySqrt('Sq km', 'Area', 6.2),
   };
 
 sizeInputs = d3.select('#sizeInput').selectAll("input").data(Object.keys(radiusMap)).enter().append('div');
@@ -117,30 +117,34 @@ function colourFromBorough() {
 }
 
 function colourFromGenericPercent(caption, index){
-  function makeColour(d){
-    var percentToByteScale = d3.scale.linear().range([0,255])
-    .domain([dataBounds[index].min,dataBounds[index].max]);
-    var n = Math.round(percentToByteScale(d[index]));
+  var percentToByteScale = d3.scale.linear().range([0,255])
+    .domain(dataBounds[index]);
+  function c(a){
+    var n = Math.round(percentToByteScale(a));
     return d3.rgb(255-n,n,255-n);
+  }
+  function makeColour(d){
+    return c(d[index]);
   }
   makeColour.caption = function(d){
     return caption + ": " + d[index] + '%';
   }
   makeColour.key = [{
-    colour: d3.rgb(0, 255, 0),
-    caption: dataBounds[index].max+"% " + caption
+    colour: c(dataBounds[index][1]),
+    caption: dataBounds[index][1]+"% " + caption
   }, {
-    colour: d3.rgb(255, 0, 255),
-    caption: dataBounds[index].min+"% " + caption
+    colour: c(dataBounds[index][0]),
+    caption: dataBounds[index][0]+"% " + caption
   }];
   return makeColour;
 }
 
 var colourMap = {
-    "Social Housing Percent": colourFromGenericPercent('Social housing', 'Social_house_percent'),
-    "BAME Percent": colourFromGenericPercent('BAME Population', 'BAME_percent'),
-    "Employment Rate": colourFromGenericPercent('Employment rate', 'Employment_rate'),
+    "% Households Social Rented - 2011": colourFromGenericPercent('Social housing', 'Social_house_percent'),
+    "% BAME - 2011": colourFromGenericPercent('BAME Population', 'BAME_percent'),
+    "Employment rate (16-64) - 2011": colourFromGenericPercent('Employment rate', 'Employment_rate'),
     "% Flat, maisonette or apartment - 2011": colourFromGenericPercent('Apartments', 'Apartment_percent'),
+    'Claimant rate of key out-of-work benefits (working age client group) (2014)': colourFromGenericPercent('OOW Benefits Recipients', 'Out_of_work_benefints_percent'),
     "Borough": colourFromBorough(),
   };
 
