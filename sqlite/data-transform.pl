@@ -14,14 +14,10 @@ my $headline = <$fh>;
 $csv->parse($headline);
 my ($ignore, @years) = $csv->fields();
 
-my $notesline = <$fh>;
-$csv->parse($notesline);
-my ($ignore2, @notes) = $csv->fields();
-
 while (<$fh>){
 	$csv->parse($_) or die "couldn't parse :(";
 	my ($id, @values) = $csv->fields();
 	for my $i (0..$#years){
-		say "$id,$years[$i],$values[$i],$notes[$i]";
+		say "$id,$years[$i],$values[$i]";
 	}
 }
